@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f4ef">
+  <title>章节题库</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Chapter Bank</p>
+        <h1>章节题库</h1>
+      </div>
+      <div class="top-actions">
+        <button id="syncNow" class="ghost">同步</button>
+        <button id="exportAll" class="ghost">导出</button>
+        <label class="primary file-trigger">
+          导入
+          <input id="importFile" type="file" accept=".json,.csv">
+        </label>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar" aria-label="章节">
+        <div class="panel compact">
+          <p class="panel-label">模式</p>
+          <div class="segmented" role="tablist">
+            <button id="modeAll" class="active" type="button">全部</button>
+            <button id="modeWrong" type="button">错题本</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <p class="panel-label">章节</p>
+            <span id="questionTotal">0 题</span>
+          </div>
+          <nav id="chapterList" class="chapter-list"></nav>
+        </div>
+
+        <div class="panel sync-panel">
+          <div class="panel-head">
+          <p class="panel-label">多端同步</p>
+            <span id="syncStatus">本地</span>
+          </div>
+          <input id="syncEndpoint" type="url" placeholder="同步接口 URL，可选">
+          <input id="syncKey" type="password" placeholder="同步密钥，可选">
+          <button id="saveSync" class="ghost full">保存同步设置</button>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <div class="stats-grid">
+          <div class="stat">
+            <span>已答</span>
+            <strong id="answeredCount">0</strong>
+          </div>
+          <div class="stat">
+            <span>正确率</span>
+            <strong id="accuracyRate">0%</strong>
+          </div>
+          <div class="stat">
+            <span>错题</span>
+            <strong id="wrongCount">0</strong>
+          </div>
+        </div>
+
+        <article class="question-card">
+          <div class="question-meta">
+            <span id="currentChapter">未选择章节</span>
+            <span id="wrongTimes"></span>
+          </div>
+          <h2 id="questionTitle">导入题目后开始练习</h2>
+          <div id="optionList" class="option-list"></div>
+          <textarea id="textAnswer" class="text-answer" rows="3" placeholder="输入答案"></textarea>
+          <div id="feedback" class="feedback" aria-live="polite"></div>
+          <div class="card-actions">
+            <button id="submitAnswer" class="primary">提交</button>
+            <button id="nextQuestion" class="ghost">下一题</button>
+            <button id="masterQuestion" class="ghost">标记已掌握</button>
+          </div>
+        </article>
+
+        <section class="panel import-help">
+          <p class="panel-label">导入格式</p>
+          <p>支持 JSON 或 CSV。字段：chapter、type、prompt、options、answer、explanation。选择题的 options 和 answer 用竖线分隔。</p>
+          <textarea id="bulkImportText" class="bulk-import" rows="6" placeholder="也可以把超星导出的 JSON 粘贴到这里"></textarea>
+          <button id="bulkImport" class="ghost full" type="button">粘贴导入</button>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="./questions-data.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
