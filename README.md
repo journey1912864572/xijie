@@ -51,15 +51,15 @@ chapter,type,prompt,options,answer,explanation
 3. 仓库 Settings -> Pages -> Build and deployment 选择 GitHub Actions。
 4. 提交后等待 Actions 完成，访问 `https://你的用户名.github.io/仓库名/`。
 
-## 同步接口
+## Supabase 多端同步
 
-网站会向你填写的同步接口发送：
+本网站已接入 Supabase REST API。首次使用前，在 Supabase SQL Editor 执行 `supabase-setup.sql`。
 
-```json
-{
-  "stats": {},
-  "updatedAt": "2026-06-25T00:00:00.000Z"
-}
-```
+三端同步方法：
 
-接口需要支持 `POST`，并可读取请求头 `X-Sync-Key`。纯静态网页本身不能保存跨设备数据；多端同步必须有你自己的云函数、Supabase Edge Function、Cloudflare Worker 或其他后端接口。
+1. 手机、电脑、平板打开同一个网站。
+2. 在“同步密钥”里填写同一个口令，例如自己设一个不容易猜到的短句。
+3. 点“保存同步设置”。
+4. 答题后会自动上传；换设备后点“同步”拉取进度。
+
+同步密钥只在浏览器本地保存；上传到 Supabase 的记录 ID 是密钥的 SHA-256 哈希，不会明文上传。

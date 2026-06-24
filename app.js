@@ -51,7 +51,14 @@ const sampleQuestions = Array.isArray(window.chapterBankQuestions) && window.cha
   ? window.chapterBankQuestions
   : demoQuestions;
 
-const storageKey = "chapter-bank-v3";
+const supabaseConfig = {
+  restUrl: "https://rajdqzimeldetsgnafoa.supabase.co/rest/v1",
+  apiKey: "sb_publishable_j556hWcKvQqoNlTellywBA_8Yfk2lLe",
+  table: "question_bank_progress"
+};
+
+const storageKey = "chapter-bank-v4";
+const previousStorageKey = "chapter-bank-v3";
 let state = loadState();
 let view = {
   mode: "all",
@@ -61,16 +68,24 @@ let view = {
 };
 
 function loadState() {
-  const saved = localStorage.getItem(storageKey);
-  if (saved) return JSON.parse(saved);
-  return {
+  const saved = localStorage.getItem(storageKey) || localStorage.getItem(previousStorageKey);
+  const base = saved ? JSON.parse(saved) : {
     questions: sampleQuestions,
     stats: {},
-    sync: { endpoint: "", key: "" }
+    sync: { endpoint: supabaseConfig.restUrl, key: "" },
+    updatedAt: new Date(0).toISOString()
   };
+  base.questions = Array.isArray(base.questions) && base.questions.length ? base.questions : sampleQuestions;
+  base.stats = base.stats || {};
+  base.sync = base.sync || {};
+  base.sync.endpoint = base.sync.endpoint || supabaseConfig.restUrl;
+  base.sync.key = base.sync.key || "";
+  base.updatedAt = base.updatedAt || new Date(0).toISOString();
+  return base;
 }
 
-function saveState() {
+function saveState(touch = true) {
+  if (touch) state.updatedAt = new Date().toISOString();
   localStorage.setItem(storageKey, JSON.stringify(state));
 }
 
@@ -124,9 +139,9 @@ function render() {
   renderQuestion();
   els.modeAll.classList.toggle("active", view.mode === "all");
   els.modeWrong.classList.toggle("active", view.mode === "wrong");
-  els.syncEndpoint.value = state.sync.endpoint || "";
+  els.syncEndpoint.value = state.sync.endpoint || supabaseConfig.restUrl;
   els.syncKey.value = state.sync.key || "";
-  els.syncStatus.textContent = state.sync.endpoint ? "已配置" : "本地";
+  els.syncStatus.textContent = state.sync.key ? "云同步已配置" : "本地";
 }
 
 function renderChapters() {
@@ -311,22 +326,88 @@ function exportAll() {
 }
 
 async function syncState(showMessage = true) {
-  if (!state.sync.endpoint) return;
+  if (!state.sync.key) {
+    if (showMessage) showFeedback(false, "请先填写同步密钥。");
+    return;
+  }
   try {
-    const res = await fetch(state.sync.endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Sync-Key": state.sync.key || ""
-      },
-      body: JSON.stringify({ stats: state.stats, updatedAt: new Date().toISOString() })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await syncWithSupabase();
     els.syncStatus.textContent = "已同步";
     if (showMessage) showFeedback(true, "同步完成。");
   } catch (err) {
     els.syncStatus.textContent = "同步失败";
     if (showMessage) showFeedback(false, `同步失败：${err.message}`);
+  }
+}
+
+function supabaseHeaders(extra = {}) {
+  return {
+    apikey: supabaseConfig.apiKey,
+    Authorization: `Bearer ${supabaseConfig.apiKey}`,
+    "Content-Type": "application/json",
+    ...extra
+  };
+}
+
+async function syncRecordId() {
+  const normalized = state.sync.key.trim();
+  if (!normalized) throw new Error("同步密钥不能为空");
+  const bytes = new TextEncoder().encode(`xijie:${normalized}`);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function mergeStats(localStats, remoteStats) {
+  const merged = { ...localStats };
+  for (const [id, remote] of Object.entries(remoteStats || {})) {
+    const local = merged[id] || { attempts: 0, correct: 0, wrong: 0 };
+    merged[id] = {
+      attempts: Math.max(local.attempts || 0, remote.attempts || 0),
+      correct: Math.max(local.correct || 0, remote.correct || 0),
+      wrong: Math.max(local.wrong || 0, remote.wrong || 0)
+    };
+  }
+  return merged;
+}
+
+async function syncWithSupabase() {
+  const id = await syncRecordId();
+  const baseUrl = `${supabaseConfig.restUrl}/${supabaseConfig.table}`;
+  const getUrl = `${baseUrl}?id=eq.${encodeURIComponent(id)}&select=id,payload,updated_at&limit=1`;
+  const getRes = await fetch(getUrl, { headers: supabaseHeaders() });
+  if (!getRes.ok) throw new Error(await syncError(getRes));
+
+  const rows = await getRes.json();
+  if (rows.length && rows[0].payload && rows[0].payload.stats) {
+    state.stats = mergeStats(state.stats, rows[0].payload.stats);
+    state.updatedAt = new Date().toISOString();
+    saveState(false);
+    renderStats();
+  }
+
+  const payload = {
+    id,
+    payload: {
+      stats: state.stats,
+      updatedAt: state.updatedAt
+    },
+    updated_at: state.updatedAt
+  };
+  const upsertRes = await fetch(baseUrl, {
+    method: "POST",
+    headers: supabaseHeaders({ Prefer: "resolution=merge-duplicates" }),
+    body: JSON.stringify(payload)
+  });
+  if (!upsertRes.ok) throw new Error(await syncError(upsertRes));
+}
+
+async function syncError(res) {
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text);
+    return data.message || `HTTP ${res.status}`;
+  } catch {
+    return text || `HTTP ${res.status}`;
   }
 }
 
@@ -370,10 +451,11 @@ els.bulkImport.addEventListener("click", () => {
 });
 els.exportAll.addEventListener("click", exportAll);
 els.saveSync.addEventListener("click", () => {
-  state.sync.endpoint = els.syncEndpoint.value.trim();
+  state.sync.endpoint = els.syncEndpoint.value.trim() || supabaseConfig.restUrl;
   state.sync.key = els.syncKey.value.trim();
   saveState();
   render();
+  showFeedback(true, "同步设置已保存。三端使用同一个同步密钥即可共用进度。");
 });
 els.syncNow.addEventListener("click", () => syncState(true));
 
